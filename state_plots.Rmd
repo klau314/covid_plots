@@ -1,0 +1,164 @@
+---
+title: "Rate of Change of COVID-19 Cases by U.S. State"
+author: "Kathryn Lau"
+date: "3/29/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+We know from observing the spread of COVID-19 in other countries that the number of cases grows exponentially. In other words, as the number of total 
+cases grows, the number of *new* cases each day grows as well. This is why a 
+community that starts with just a couple cases can quickly jump into the hundreds, and then the thousands of cases. 
+
+In the United States, we are seeing the same pattern of rapid increases in cases. Here's a plot of the number of cases in each state per day. All data is from the opensource data published on Github by The
+New York Times (https://github.com/nytimes/covid-19-data). The plots were generated in R using plotly and include data from 1/21/2020 through 3/27/2020.
+
+```{r linear total cases, echo=FALSE}
+pacman::p_load(data.table, plotly)
+
+dt_states <- fread('C:/Users/klau314/Desktop/repos/covid-19-data/us-states.csv')
+
+dt_states <- dt_states[order(date)]
+dt_states <- dt_states[, new_cases := rep(diff(cases, lag = 1),length.out = .N), by = 'state']
+dt_states[, new_cases_lag := shift(new_cases, n = 1), by = 'state']
+
+dt_states <- dt_states[!is.na(new_cases_lag)]
+
+dt_states[, index := 1:.N, by = 'state']
+dt_states[, most_recent := .N, by = 'state']
+
+dt_states[index == 1, new_cases_lag := cases]
+
+dt_states[, new_cases_lag_log := log(new_cases_lag)]
+dt_states[new_cases_lag_log < 0, new_cases_lag_log := 0]
+
+f <- list(
+  family = "Calibri",
+  size = 18,
+  color = "black"
+)
+x <- list(
+  title = "Days Since First Confirmed Case in State",
+  titlefont = f,
+  type = 'linear'
+)
+y <- list(
+  title = "Confirmed Cases",
+  titlefont = f,
+  type = 'linear'
+)
+
+fig <- plot_ly(dt_states,
+               x = ~index, y = ~cases,
+               text = '',
+               hovertext = ~paste('Total Cases: ',cases,', New Cases: ', new_cases_lag,', State: ',state),
+               hoverinfo = 'text',
+               #hoveron = 'points+fills',
+               color= ~state, colors = 'Spectral', 
+               type = 'scatter', mode = 'lines+markers',
+               opacity = 1, 
+               selected = list(marker = list(opacity = 1)))
+
+fig <- fig %>% layout(yaxis = y, xaxis = x)
+fig
+
+```
+
+Looking at these graphs of exponential growth, it can be hard to tell if the
+situation is improving. The number of cases is growing every day, but is the rate of growth increasing or decreasing? It's hard to tell just by looking at the slope. An alternate is to look at the number of new cases. When the number of new cases per day starts to fall, that means the spread is starting to be controlled. These plots suggest that the number of new cases
+per day is starting to fall in some states, but we should be cautious in interpreting this as a true decline since 1) the data varies significantly from day-to-day, so we need to see a decline sustained over several days to take it seriously, and 2) testing may decrease as number of cases increases, as hospitals are strained and become more restrictive about who needs to be tested.
+
+```{r linear new cases, echo=FALSE}
+x <- list(
+  title = "Days Since First Confirmed Case in State",
+  titlefont = f,
+  type = 'linear'
+)
+y <- list(
+  title = "New Confirmed Cases Since Previous Day",
+  titlefont = f,
+  type = 'linear'
+)
+
+fig <- plot_ly(dt_states,
+               x = ~index, y = ~new_cases_lag,
+               text = '',
+               hovertext = ~paste('Total Cases: ',cases,', New Cases: ', new_cases_lag,', State: ',state),
+               hoverinfo = 'text',
+               #hoveron = 'points+fills',
+               color= ~state, colors = 'Spectral', 
+               type = 'scatter', mode = 'lines+markers',
+               opacity = 1, 
+               selected = list(marker = list(opacity = 1)))
+
+fig <- fig %>% layout(yaxis = y, xaxis = x)
+fig
+```
+
+Since the outbreaks vary widely in absolute size across states, it can also be helpful to view the data on a log scale. This scale makes it easier to compare states that currently have fewer cases to states with many cases. Here is the plot of new cases over time, now with new cases on the log scale.
+
+```{r log new cases, echo=FALSE}
+y <- list(
+  title = "New Confirmed Cases Since Previous Day",
+  titlefont = f,
+  type = 'linear',
+  ticktext = list(10, 100, 1000, '10k'), 
+  tickvals = list(2.3, 4.6, 6.91, 9.21),
+  tickmode = "array"
+)
+
+fig <- plot_ly(dt_states,
+               x = ~index, y = ~new_cases_lag_log,
+               text = '',
+               hovertext = ~paste('Total Cases: ',cases,', New Cases: ', new_cases_lag,', State: ',state),
+               hoverinfo = 'text',
+               #hoveron = 'points+fills',
+               color= ~state, colors = 'Spectral', 
+               type = 'scatter', mode = 'lines+markers',
+               opacity = 1, 
+               selected = list(marker = list(opacity = 1)))
+
+fig <- fig %>% layout(yaxis = y, xaxis = x)
+fig
+```
+
+
+A final interesting way to assess the outbreak is to see if any states have managed to break the cycle of exponential growth. When growth is exponential, the number of new cases is proportional to the number of total cases (i.e. new cases = total cases x some constant). This means we can plot the number of new cases against the number of total cases, and we will get a linear slope (a straight trend line). If any state manages to stop the exponential growth, it will stick out on this plot as a dramatic change in the slope and a sudden decline in the trend line.
+
+Looking at this plot, all the states are currently still experiencing exponential growth. Virgina jumps out as one state that appears to be steeply dropping off from the main trend, but that's almost certaintly a result of random variation leading to the most recent data point being atypically low, and not likely to be a sustained trend over the next several days.
+
+Another takeaway from this plot is that states with few cases now are very likely to follow the pattern shown by other states, where new cases grow quickly (i.e. exponentially) as there are more total cases. Unless those states are able to implement more aggressive and successful containment, quarantine, and tracing measures.
+
+```{r state_plot, echo=FALSE}
+x <- list(
+  title = "Total Confirmed Cases",
+  titlefont = f,
+  type = 'log'
+)
+y <- list(
+  title = "New Confirmed Cases Since Previous Day",
+  titlefont = f,
+  type = 'linear',
+  ticktext = list(10, 100, 1000, '10k'), 
+  tickvals = list(2.3, 4.6, 6.91, 9.21),
+  tickmode = "array"
+)
+
+fig <- plot_ly(dt_states,
+               x = ~cases, y = ~new_cases_lag_log,
+               text = '',
+               hovertext = ~paste('Day: ',index,', Total Cases: ',cases,', New Cases: ', new_cases_lag,', State: ',state),
+               hoverinfo = 'text',
+               color= ~state, colors = 'Spectral', 
+               type = 'scatter', mode = 'lines+markers',
+               opacity = 1, 
+               selected = list(marker = list(opacity = 1)))
+
+fig <- fig %>% layout(yaxis = y, xaxis = x)
+fig
+```
+
+
